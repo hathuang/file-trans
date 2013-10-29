@@ -28,6 +28,7 @@ unsigned int all_trans_bytes = 0;
 unsigned int all_trans_gbytes = 0;
 #endif
 
+#if 0
 struct server_args {
 	char trans_path[256];
 	char password[256];
@@ -63,7 +64,7 @@ static int get_opt(struct server_args *server, int argc, char *argv[])
 	}
 	return 0;
 }
-
+#endif
 #ifdef SERVER
 static int trans_file(int sock, const char *_file)
 {
@@ -206,7 +207,7 @@ static int trans_dir_client(int sock)
 	int len = 0, bytes = 0;
 
 	if (sock < 0) return -1;
-	if (recv(sock, &len, sizeof(int), 0) != sizeof(int)) {
+	if (recv(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
 		fprintf(stderr, "recv file name len Failed : %s\n", strerror(errno));
 		return -1;
 	}

@@ -1,19 +1,25 @@
 ifeq ($(arch), win) # windows
 ifeq ($(bits), 64)
 BITS_FLAG       := -m64
-TARGET_LIB      := lib/libadbclient64.dll
+ifeq ($(target), server)
+TARGET_BIN      := server-64.exe
+else
+TARGET_BIN      := client-64.exe
+endif
 
 CC              := x86_64-w64-mingw32-gcc 
-CXX             := x86_64-w64-mingw32-g++
 LD              := x86_64-w64-mingw32-gcc
 STP             := x86_64-w64-mingw32-strip
 CFLAGS          += -I/usr/x86_64-w64-mingw32/include
 else
 BITS_FLAG       := -m32
-TARGET_LIB      := lib/libadbclient32.dll
+ifeq ($(target), server)
+TARGET_BIN      := server-32.exe
+else
+TARGET_BIN      := client-32.exe
+endif
 
 CC              := i686-w64-mingw32-gcc 
-CXX             := i686-w64-mingw32-g++
 LD              := i686-w64-mingw32-gcc
 STP             := i686-w64-mingw32-strip
 CFLAGS          += -I/usr/i686-w64-mingw32/include
@@ -27,32 +33,32 @@ else               # linux
 
 ifeq ($(bits), 64)
 BITS_FLAG       := -m64
-TARGET_LIB      := lib/libadbclient64.so
+ifeq ($(target), server)
+TARGET_BIN      := server-64
+else
+TARGET_BIN      := client-64
+endif
 else
 BITS_FLAG       := -m32
-TARGET_LIB      := lib/libadbclient32.so
+ifeq ($(target), server)
+TARGET_BIN      := server-32
+else
+TARGET_BIN      := client-32
 endif
-CC              := gcc -fPIC
-CXX             := g++ -fPIC
-LD              := g++ -fPIC
+endif
+CC              := gcc
+LD              := gcc
 STP             := strip
 endif
 
-#JAVAHOME        := /usr/lib/jvm/java-6-openjdk-amd64
-JAVAHOME        += /usr/lib/jvm/java-6-sun-1.6.0.24
 CFLAGS          += $(BITS_FLAG) -Wall
-CPPFLAGS        += $(BITS_FLAG) -g -I$(JAVAHOME)/include
-LDFLAGS         += $(BITS_FLAG) -shared
-OBJS            := adbclient.o status.o syslog.o file_sync_client.o \
-                   sync.o zipfile.o centraldir.o adbClientJni.o log.o
+LDFLAGS         += $(BITS_FLAG)
+OBJS            := main.o
 
 all:$(OBJS)
-	$(LD) $(LDFLAGS) -o $(TARGET_LIB) $(OBJS) $(AFLAG)
-	$(STP) $(TARGET_LIB)
+	$(LD) $(LDFLAGS) -o $(TARGET_BIN) $(OBJS) $(AFLAG)
+	$(STP) $(TARGET_BIN)
 	rm -f *.o *.d
-
-%.o:%.cpp
-	$(CXX) -c $(CPPFLAGS) $< -o $*.o
 
 %.o:%.c
 	$(CC) -c $(CFLAGS) $< -o $*.o
@@ -63,5 +69,4 @@ all:$(OBJS)
 .PHONY: clean
 clean:
 	rm -f *.o *.d
-	rm -rf lib/*.so
-	rm -rf lib/*.dll
+	rm -f server* client*
