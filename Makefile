@@ -2,8 +2,10 @@ ifeq ($(arch), win) # windows
 ifeq ($(bits), 64)
 BITS_FLAG       := -m64
 ifeq ($(target), server)
+CFLAGS		+= -DSERVER
 TARGET_BIN      := server-64.exe
 else
+CFLAGS		+= -DCLIENT
 TARGET_BIN      := client-64.exe
 endif
 
@@ -14,6 +16,7 @@ CFLAGS          += -I/usr/x86_64-w64-mingw32/include
 else
 BITS_FLAG       := -m32
 ifeq ($(target), server)
+CFLAGS		+= -DSERVER
 TARGET_BIN      := server-32.exe
 else
 TARGET_BIN      := client-32.exe
@@ -34,6 +37,7 @@ else               # linux
 ifeq ($(bits), 64)
 BITS_FLAG       := -m64
 ifeq ($(target), server)
+CFLAGS		+= -DSERVER
 TARGET_BIN      := server-64
 else
 TARGET_BIN      := client-64
@@ -41,6 +45,7 @@ endif
 else
 BITS_FLAG       := -m32
 ifeq ($(target), server)
+CFLAGS		+= -DSERVER
 TARGET_BIN      := server-32
 else
 TARGET_BIN      := client-32

@@ -21,6 +21,7 @@ const char local_file_separator = '/';
 
 #define DEFAULT_SERVER_PORT (1121 + 9280)
 #define DEFAULT_BUFFER_SIZE (1 << 20)
+static char *gbuffer = NULL;
 
 #ifndef SERVER
 char remote_file_separator = '\\';
@@ -71,6 +72,7 @@ static int trans_file(int sock, const char *_file)
 	char file[1024];
 	int len = 0, bytes = 0;
 	struct stat st;
+	char *buffer = gbuffer;
 
 	if (sock < 0) return -1;
 	if (!_file) return -1;
@@ -92,27 +94,19 @@ static int trans_file(int sock, const char *_file)
 		fprintf(stderr, "%s : %s\n", file, strerror(errno));
 		return -1;
 	}
-	char *buffer = malloc(DEFAULT_BUFFER_SIZE);
-	if (!buffer) {
-		fprintf(stderr, "malloc : %s\n", strerror(errno));
-		return -1;
-	}
 	len = htonl(len);
 	if (send(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
 		fprintf(stderr, "send file name len Failed : %s\n", strerror(errno));
-		free(buffer);
 		return -1;
 	}
 	len = ntohl(len);
 	if (send(sock, file, len, 0) != len) {
 		fprintf(stderr, "send file name Failed : %s\n", strerror(errno));
-		free(buffer);
 		return -1;
 	}
 	len = htonl(st.st_size);
 	if (send(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
 		fprintf(stderr, "file size Failed : %s\n", strerror(errno));
-		free(buffer);
 		return -1;
 	}
 	len = st.st_size;
@@ -121,7 +115,6 @@ static int trans_file(int sock, const char *_file)
 		if (bytes <= 0 || send(sock, buffer, bytes, 0) != bytes) break;
 		len -= bytes;
 	}
-	free(buffer);
 	close(fd);
 
 	return len ? -1: 0;
@@ -205,6 +198,7 @@ static int trans_dir_client(int sock)
 {
 	char file[1024];
 	int len = 0, bytes = 0;
+	char *buffer = gbuffer;
 
 	if (sock < 0) return -1;
 	if (recv(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
@@ -241,15 +235,8 @@ static int trans_dir_client(int sock)
 		fprintf(stderr, "%s : %s\n", file, strerror(errno));
 		return -1;
 	}
-	char *buffer = malloc(DEFAULT_BUFFER_SIZE);
-	if (!buffer) {
-		fprintf(stderr, "malloc : %s\n", strerror(errno));
-		close(fd);
-		return -1;
-	}
 	if (recv(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
 		fprintf(stderr, "file size Failed : %s\n", strerror(errno));
-		free(buffer);
 		close(fd);
 		return -1;
 	}
@@ -261,7 +248,6 @@ static int trans_dir_client(int sock)
 		if (bytes <= 0 || bytes != write(fd, buffer, bytes)) break;
 		len -= bytes;
 	}
-	free(buffer);
 	close(fd);
 
 	return len ? -1: 0;
@@ -415,9 +401,16 @@ int main(int argc, char *argv[])
 		close(listen_sock);
 		return 1;
 	}
+	gbuffer = malloc(DEFAULT_BUFFER_SIZE);
+	if (!gbuffer) {
+		close(sock);
+		fprintf(stderr, "malloc : %s\n", strerror(errno));
+		return -1;
+	}
 	if (trans_dir(sock, argv[1])) {
 		fprintf(stderr, "trans_file fail\n");
 	}
+	if (gbuffer) free(gbuffer);
 	// Tell the client the end meet 1
 	int e = 0;
 
@@ -461,8 +454,15 @@ int main(int argc, const char *argv[])
 	}
 
 	gettimeofday(&tv_start, NULL);
+	gbuffer = malloc(DEFAULT_BUFFER_SIZE);
+	if (!gbuffer) {
+		close(sock);
+		fprintf(stderr, "malloc : %s\n", strerror(errno));
+		return -1;
+	}
 	while (!trans_dir_client(sock));
 	close(sock);
+	if (gbuffer) free(gbuffer);
 	gettimeofday(&tv_end, NULL);
 	fprintf(stderr, "Trans : %d MB\n", all_trans_bytes >> 20);
 	fprintf(stderr, "Times : %d s\n", (int)(tv_end.tv_sec - tv_start.tv_sec));
