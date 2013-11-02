@@ -16,6 +16,7 @@
 
 #define lstat stat   /* no symlinks on Win32 */
 #define mkdir(path, mode) mkdir(path)
+#define __int64_t __int64
 
 #ifndef Win32
 #define Win32 

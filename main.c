@@ -2,6 +2,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
+//#ifndef _FILE_OFFSET_BITS
+//#define _FILE_OFFSET_BITS 64
+//#endif
+//#ifndef __USE_FILE_OFFSET64
+//#define __USE_FILE_OFFSET64
+//#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -25,9 +31,25 @@ static char *gbuffer = NULL;
 
 #ifndef SERVER
 char remote_file_separator = '\\';
-unsigned int all_trans_bytes = 0;
-unsigned int all_trans_gbytes = 0;
+__int64_t all_trans_bytes = 0;
+__int64_t all_trans_gbytes = 0;
 #endif
+
+#define KB                      (1<<10)
+#define MB                      (1<<20)
+#define GB                      (1<<30)
+
+/* why 103 ? it is 1024/10 = 102 . 1023/102 = 10 > 9 so 103. */
+#define PRINT_BYTES(iBytes)\
+do {\
+	iBytes >= GB \
+		? fprintf(stderr, "%u.%1uGB\t", iBytes>>30, ((iBytes>>20)&0x3ff)/103) \
+		: iBytes >= MB \
+		? fprintf(stderr, "%u.%1uMB\t", iBytes>>20, ((iBytes>>10)&0x3ff)/103) \
+		: iBytes >= KB \
+		? fprintf(stderr, "%u.%1ukB\t", iBytes>>10, (iBytes&0x3ff)/103) \
+		: fprintf(stderr, "%uB\t", iBytes); \
+} while(0)
 
 #if 0
 struct server_args {
@@ -66,18 +88,33 @@ static int get_opt(struct server_args *server, int argc, char *argv[])
 	return 0;
 }
 #endif
+
+__int64_t htonll(__int64_t l)
+{
+	if (sizeof(__int64_t) == sizeof(int)) {
+		return (off_t)htonl((unsigned int)l);
+	}
+
+	unsigned int *p = (unsigned int *)&l;
+	unsigned long long d = (unsigned long long)htonl(*p++) << 32;
+	d |= (unsigned long long)htonl(*p);
+
+	return (__int64_t)d;
+}
+#define ntohll htonll
 #ifdef SERVER
 static int trans_file(int sock, const char *_file)
 {
 	char file[1024];
 	int len = 0, bytes = 0;
-	struct stat st;
+	struct stat64 st;
 	char *buffer = gbuffer;
+	__int64_t file_size = 0;
 
 	if (sock < 0) return -1;
 	if (!_file) return -1;
 	len = snprintf(file, sizeof file, "%s", _file);
-	if (stat(file, &st)) {
+	if (stat64(file, &st)) {
 		fprintf(stderr, "stat %s : %s\n", file, strerror(errno));
 		return -1;
 	}
@@ -104,29 +141,29 @@ static int trans_file(int sock, const char *_file)
 		fprintf(stderr, "send file name Failed : %s\n", strerror(errno));
 		return -1;
 	}
-	len = htonl(st.st_size);
-	if (send(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
+	file_size = htonll(st.st_size);
+	if (send(sock, (char *)&file_size, sizeof(file_size), 0) != sizeof(file_size)) {
 		fprintf(stderr, "file size Failed : %s\n", strerror(errno));
 		return -1;
 	}
-	len = st.st_size;
-	while (len > 0) {
+	file_size = st.st_size;
+	while (file_size > 0) {
 		bytes = read(fd, buffer, DEFAULT_BUFFER_SIZE);
 		if (bytes <= 0 || send(sock, buffer, bytes, 0) != bytes) break;
-		len -= bytes;
+		file_size -= bytes;
 	}
 	close(fd);
 
-	return len ? -1: 0;
+	return file_size ? -1: 0;
 }
 
 static int trans_dir(int sock, const char *dir)
 {
-	struct stat st;
+	struct stat64 st;
 	char subdir[1024];
 
 	if (!dir) return -1;
-	if (stat(dir, &st)) {
+	if (stat64(dir, &st)) {
 		fprintf(stderr, "stat %s : %s\n", dir, strerror(errno));
 		return -1;
 	}
@@ -199,13 +236,14 @@ static int trans_dir_client(int sock)
 	char file[1024];
 	int len = 0, bytes = 0;
 	char *buffer = gbuffer;
+	__int64_t file_size = 0;
 
 	if (sock < 0) return -1;
 	if (recv(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
 		fprintf(stderr, "recv file name len Failed : %s\n", strerror(errno));
 		return -1;
 	}
-	len = htonl(len);
+	len = ntohl(len);
 	if (len <= 0) {
 		fprintf(stderr, "The End !\n");
 		return 1;
@@ -235,22 +273,24 @@ static int trans_dir_client(int sock)
 		fprintf(stderr, "%s : %s\n", file, strerror(errno));
 		return -1;
 	}
-	if (recv(sock, (char *)&len, sizeof(int), 0) != sizeof(int)) {
+	if (recv(sock, (char *)&file_size, sizeof(__int64_t), 0) != sizeof(__int64_t)) {
 		fprintf(stderr, "file size Failed : %s\n", strerror(errno));
 		close(fd);
 		return -1;
 	}
-	// FIXME if the file larger than 4G
-	len = htonl(len);
-	all_trans_bytes += len;
-	while (len > 0) {
-		bytes = recv(sock, buffer, DEFAULT_BUFFER_SIZE >= len ? len : DEFAULT_BUFFER_SIZE, 0);
+	file_size = ntohll(file_size);
+	// FIXME
+	PRINT_BYTES(file_size);
+	fprintf(stderr, "%s\n", file);
+	all_trans_bytes += file_size;
+	while (file_size > 0) {
+		bytes = recv(sock, buffer, DEFAULT_BUFFER_SIZE > file_size ? file_size: DEFAULT_BUFFER_SIZE, 0);
 		if (bytes <= 0 || bytes != write(fd, buffer, bytes)) break;
-		len -= bytes;
+		file_size -= bytes;
 	}
 	close(fd);
 
-	return len ? -1: 0;
+	return file_size ? -1: 0;
 }
 #endif
 
@@ -370,7 +410,7 @@ int trans_info(int sock)
 	}
 	return 0;
 }
-
+#if 1
 int main(int argc, char *argv[])
 {
 	//if (get_opt(&server_args, argc, argv)) {
@@ -414,7 +454,7 @@ int main(int argc, char *argv[])
 	// Tell the client the end meet 1
 	int e = 0;
 
-	if (send(sock, (char *)&e, sizeof(int), 0) != sizeof(int)) {
+	if (send(sock, (char *)&e, sizeof(e), 0) != sizeof(e)) {
 		fprintf(stderr, "send End Flag Failed : %s\n", strerror(errno));
 	}
 	close(sock);
@@ -423,6 +463,28 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+#else
+
+int main(int argc, const char *argv[])
+{
+	struct stat64 st;
+
+	if (_stat64("File.txt", &st)) {
+		return -1;
+	}
+	if (S_ISDIR(st.st_mode)) {
+	fprintf(stderr, "%s is a directory !\n", "file.txt");
+	} else if (S_ISREG(st.st_mode)) {
+	fprintf(stderr, "%s is a file!\n", "file.txt");
+	}
+
+	st.st_size = st.st_size >> 10;
+	fprintf(stderr, "%d file size %llu\n", sizeof(st.st_size), (unsigned long long)(st.st_size));
+	fprintf(stderr, "%d ,%d ,%d\n", sizeof(st.st_size), sizeof(off_t), sizeof(__int64_t));
+
+	return 0;
+}
+#endif
 #else
 
 int trans_info(int sock)
@@ -464,7 +526,7 @@ int main(int argc, const char *argv[])
 	close(sock);
 	if (gbuffer) free(gbuffer);
 	gettimeofday(&tv_end, NULL);
-	fprintf(stderr, "Trans : %d MB\n", all_trans_bytes >> 20);
+	fprintf(stderr, "Trans : %llu MB\n", (unsigned long long)(all_trans_bytes >> 20));
 	fprintf(stderr, "Times : %d s\n", (int)(tv_end.tv_sec - tv_start.tv_sec));
 	fprintf(stderr, "Trans : %0.2f KB/s\n", ((double)all_trans_bytes / 1024.0)/((double)(tv_end.tv_sec - tv_start.tv_sec)));
 
