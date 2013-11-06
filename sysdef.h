@@ -13,6 +13,7 @@
 #include <wtypes.h>
 #include <winnls.h>
 #include <io.h>
+#include <winbase.h>
 
 #define lstat stat   /* no symlinks on Win32 */
 #define mkdir(path, mode) mkdir(path)
@@ -30,6 +31,8 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+
+#define stat64 stat
 
 /*__asm__(".symver memcpy,memcpy@GLIBC_2.2.5");*/
 

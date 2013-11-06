@@ -43,12 +43,12 @@ __int64_t all_trans_gbytes = 0;
 #define PRINT_BYTES(iBytes)\
 do {\
 	iBytes >= GB \
-		? fprintf(stderr, "%u.%1uGB\t", iBytes>>30, ((iBytes>>20)&0x3ff)/103) \
+		? fprintf(stderr, "%u.%1uGB\t", (unsigned int)iBytes>>30, (unsigned int)((iBytes>>20)&0x3ff)/103) \
 		: iBytes >= MB \
-		? fprintf(stderr, "%u.%1uMB\t", iBytes>>20, ((iBytes>>10)&0x3ff)/103) \
+		? fprintf(stderr, "%u.%1uMB\t", (unsigned int)iBytes>>20, (unsigned int)((iBytes>>10)&0x3ff)/103) \
 		: iBytes >= KB \
-		? fprintf(stderr, "%u.%1ukB\t", iBytes>>10, (iBytes&0x3ff)/103) \
-		: fprintf(stderr, "%uB\t", iBytes); \
+		? fprintf(stderr, "%u.%1ukB\t", (unsigned int)iBytes>>10, (unsigned int)(iBytes&0x3ff)/103) \
+		: fprintf(stderr, "%uB\t", (unsigned int)iBytes); \
 } while(0)
 
 #if 0
