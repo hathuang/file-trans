@@ -25,7 +25,7 @@ const char local_file_separator = '\\';
 const char local_file_separator = '/';
 #endif
 
-#define DEFAULT_SERVER_PORT (1121 + 9280)
+#define DEFAULT_SERVER_PORT 9999
 #define DEFAULT_BUFFER_SIZE (1 << 20)
 static char *gbuffer = NULL;
 
